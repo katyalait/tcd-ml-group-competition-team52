@@ -27,6 +27,10 @@ HEIGHT=14
 ADD_INCOME=15
 INCOME=16
 
+NUM_PLOT = [CRIME, WORK_EXPERIENCE, CITY_SIZE, ADD_INCOME]
+STR_PLOT = [HOUSING, SATISFACTION,
+            COUNTRY, PROFESSION, DEGREE]
+
 CLEAN_DATA_DIR = os.path.abspath('data/clean_data')
 DATA_DIR = os.path.abspath('data')
 
@@ -52,6 +56,7 @@ MISSING_VALUES = ['#N/A', 'nA', '#NUM!']
 
 INCOME_OUTLIER_THRESHOLD = np.log(4000000)
 NUM_FOLDS = 3
+
 
 def rename_columns(df):
     newnames = {
@@ -124,17 +129,14 @@ def clean_data(df, test):
     df = remove_outliers(df, True, INCOME)
 
     target_maps = create_target_mappings(df, INCOME, ENCODING_COLS)
+
     df = target_map_columns(df, target_maps, ENCODING_COLS)
     test = target_map_columns(test, target_maps, ENCODING_COLS)
 
-
-    for col in test:
-        if test[col].isnull().values.any():
-            print("Found NaNs in " + col)
     # Make sure they have the same number of columns
     print(df.shape)
     print(test.shape)
-    return df,test
+    return df, test
 
 def clean_values(df):
 
@@ -260,10 +262,13 @@ def remove_outliers(df, training, col):
     """
     if training:
         z = np.abs(stats.zscore(df[COLUMNS[col]]))
-        df_w_o_outliers = df[(z < 6)]
+        df_w_o_outliers = df[(z < 5)]
         return df_w_o_outliers
     else:
         return df
+
+def gradient_boosted_target_estimator(df):
+    pass
 
 def convert_sparse_values(df, threshold, cols, replacement='other'):
     """

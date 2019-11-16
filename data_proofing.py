@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import pre_process as pp
 
 """
-For analysing the data and getting visual insights into the values 
+For analysing the data and getting visual insights into the values
 
 """
 
@@ -53,4 +53,12 @@ def get_outliers(df, col):
 def category_histogram(df, col):
     counts = df[col].value_counts()
     ax = counts.plot(kind='bar')
+    plt.show()
+
+def scatter_plot(df, col1, col2):
+    ax = df.plot.scatter(x=pp.COLUMNS[col2], y=pp.COLUMNS[col1])
+    plt.show()
+
+def strip_plot(df, col1, col2):
+    ax = sns.stripplot(x=pp.COLUMNS[col2], y=pp.COLUMNS[col1], data=df)
     plt.show()
