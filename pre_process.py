@@ -6,6 +6,7 @@ from scipy import stats
 from sklearn.preprocessing import StandardScaler
 import matplotlib.pyplot as plt
 
+
 # Constant int values representing columns which are associated with
 # their value in the COLUMN array
 INSTANCE=0
@@ -32,8 +33,8 @@ DATA_DIR = os.path.abspath('data')
 TRAINING_DATA = os.path.join(DATA_DIR, "training_data.csv")
 TEST_DATA = os.path.join(DATA_DIR, "test_data.csv")
 
-NA_COLUMNS = [YEAR, SATISFACTION, GENDER, PROFESSION, DEGREE, HAIR, HOUSING]
-TARGET_COLUMNS = [ADD_INCOME, INCOME]
+NA_COLUMNS = [YEAR, SATISFACTION, GENDER, PROFESSION, DEGREE, HAIR, HOUSING, WORK_EXPERIENCE]
+TARGET_COLUMNS = [INCOME, ADD_INCOME]
 CATEGORICAL_COLS = [SATISFACTION, GENDER, COUNTRY, PROFESSION, DEGREE, HAIR, HOUSING]
 OH_COLS = [GENDER, DEGREE, SATISFACTION, HAIR, HOUSING]
 ENCODING_COLS = [COUNTRY, PROFESSION]
@@ -47,7 +48,7 @@ COLUMNS = ['Instance', 'Year', 'Housing', 'Crime','Work Experience', 'Satisfacti
        'Degree', 'Glasses', 'Hair', 'Height',
        'Additional Income', 'Income']
 
-MISSING_VALUES = ['#N/A', 'nA']
+MISSING_VALUES = ['#N/A', 'nA', '#NUM!']
 
 INCOME_OUTLIER_THRESHOLD = np.log(4000000)
 NUM_FOLDS = 3
@@ -82,7 +83,7 @@ def get_df_from_csv(filename, training):
     df = clean_data(df, training)
     return df
 
-def clean_data(df, training):
+def clean_data(df, test):
     """
     Cleans the dataframe
     :param filename: string representation of file name
@@ -90,27 +91,50 @@ def clean_data(df, training):
     :return: pandas cleaned dataframe
     """
     print(df.shape)
+    df['train'] = 1
+    test['train'] = 0
+
     df = rename_columns(df)
+    test = rename_columns(test)
+
     for col in DROPPED_COLUMNS:
         df = df.drop(COLUMNS[col], axis=1)
-
-    # df = oh_encode(df)
-    df[COLUMNS[ADD_INCOME]] = df[COLUMNS[ADD_INCOME]].str.split(" ", n=1, expand=True)[0]
-    df[COLUMNS[ADD_INCOME]] = pd.to_numeric(df[COLUMNS[ADD_INCOME]])
+        test = test.drop(COLUMNS[col], axis=1)
 
     for col in NA_COLUMNS:
-        df = remove_unknowns(df, col, training)
+        df = remove_unknowns(df, col, True)
+        test = remove_unknowns(test, col, False)
 
-    df = remove_outliers(df, training, INCOME)
-    df = clean_values(df)
+    total = pd.concat([df, test])
+    total = clean_values(total)
+    convert_sparse_values(total, LOW_FREQUENCY_THRESHOLD, CATEGORICAL_COLS)
+    total = oh_encode(total)
+    # Convert the additional income column to be numeric
+    total[COLUMNS[ADD_INCOME]] = total[COLUMNS[ADD_INCOME]].str.split(" ", n=1, expand=True)[0]
+    total[COLUMNS[ADD_INCOME]] = pd.to_numeric(total[COLUMNS[ADD_INCOME]])
 
-    convert_sparse_values(df, LOW_FREQUENCY_THRESHOLD, CATEGORICAL_COLS)
+    df = total[total['train']==1]
+    test = total[total['train']==0]
 
-    df = oh_encode(df)
+    df = df.drop(['train'], axis=1)
+    test = test.drop(['train'], axis=1)
 
-    df = get_target_mappings(df, INCOME, ENCODING_COLS)
+
+
+    df = remove_outliers(df, True, INCOME)
+
+    target_maps = create_target_mappings(df, INCOME, ENCODING_COLS)
+    df = target_map_columns(df, target_maps, ENCODING_COLS)
+    test = target_map_columns(test, target_maps, ENCODING_COLS)
+
+
+    for col in test:
+        if test[col].isnull().values.any():
+            print("Found NaNs in " + col)
+    # Make sure they have the same number of columns
     print(df.shape)
-    return df
+    print(test.shape)
+    return df,test
 
 def clean_values(df):
 
@@ -156,26 +180,36 @@ def clean_num_cols(df, col):
     df[COLUMNS[col]].fillna(df[COLUMNS[col]].mean(), inplace=True)
     return df
 
-def get_target_mappings(df, target_column, encoding_columns, mean_smoothing_weight=0.3):
+def create_target_mappings(df, target_column, encoding_columns, mean_smoothing_weight=0.3):
+        """
+        Creates target mappings for columns in the provided dataframe
+        :param df:
+        :param target_column:
+        :param encoding_columns:
+        :param mean_smoothing_weight:
+        :return: target_maps
+        """
+        target_mappings = {}
+        mean = df[COLUMNS[target_column]].mean()
+        target_mappings[COLUMNS[target_column]] = mean
+        for enc_col in encoding_columns:
+            agg = df.groupby(COLUMNS[enc_col])[COLUMNS[target_column]].agg(['count', 'mean'])
+            counts = agg['count']
+            means = agg['mean']
+
+            target_mappings[COLUMNS[enc_col]] = ((counts * means + mean_smoothing_weight * means)/(counts + mean_smoothing_weight))
+        return target_mappings
+
+def target_map_columns(df, target_maps, encoding_cols):
     """
-    Performs target mapping on categorical columns. Target mapping converts the
-    alphanumerical values in the columns to be represented as the smoothed
-    average of its corresponding values in the target column
+    For every target mapping in the provided target maps, it will map the values
+    of the corresponding columns in the df to the smoothed mean value
     :param df:
-    :param target_column:
-    :param encoding_columns:
-    :param mean_smoothing_weight:
-    :return: df
+    :param target_maps:
+    :return df:
     """
-    mean = df[COLUMNS[target_column]].mean()
-
-    for enc_col in encoding_columns:
-        agg = df.groupby(COLUMNS[enc_col])[COLUMNS[target_column]].agg(['count', 'mean'])
-        counts = agg['count']
-        means = agg['mean']
-
-        smooth = (counts * means + mean_smoothing_weight * means)/(counts + mean_smoothing_weight)
-        df[COLUMNS[enc_col]] = df[COLUMNS[enc_col]].map(smooth)
+    for col in encoding_cols:
+        df[COLUMNS[col]] = df[COLUMNS[col]].map(target_maps[COLUMNS[col]]).fillna(target_maps[COLUMNS[INCOME]])
     return df
 
 def remove_unknowns(df, col, training):
