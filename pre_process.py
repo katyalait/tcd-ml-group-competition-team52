@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 from scipy import stats
 from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 
 
@@ -37,14 +38,14 @@ DATA_DIR = os.path.abspath('data')
 TRAINING_DATA = os.path.join(DATA_DIR, "training_data.csv")
 TEST_DATA = os.path.join(DATA_DIR, "test_data.csv")
 
-NA_COLUMNS = [YEAR, SATISFACTION, GENDER, PROFESSION, DEGREE, HAIR, HOUSING, WORK_EXPERIENCE]
+NA_COLUMNS = [YEAR, SATISFACTION, GENDER, COUNTRY, PROFESSION, DEGREE, HOUSING, WORK_EXPERIENCE]
 TARGET_COLUMNS = [INCOME, ADD_INCOME]
-CATEGORICAL_COLS = [SATISFACTION, GENDER, COUNTRY, PROFESSION, DEGREE, HAIR, HOUSING]
-OH_COLS = [GENDER, DEGREE, SATISFACTION, HAIR, HOUSING]
+CATEGORICAL_COLS = [SATISFACTION, GENDER, COUNTRY, PROFESSION, DEGREE, HOUSING]
+OH_COLS = [GENDER, DEGREE, SATISFACTION, HOUSING]
 ENCODING_COLS = [COUNTRY, PROFESSION]
 COLS_TO_TRANSFORM = [INCOME]
 LOW_FREQUENCY_THRESHOLD = 0
-DROPPED_COLUMNS = []
+DROPPED_COLUMNS = [GLASSES, HAIR]
 
 
 COLUMNS = ['Instance', 'Year', 'Housing', 'Crime','Work Experience', 'Satisfaction',
@@ -127,7 +128,6 @@ def clean_data(df, test):
 
 
     df = remove_outliers(df, True, INCOME)
-
     target_maps = create_target_mappings(df, INCOME, ENCODING_COLS)
 
     df = target_map_columns(df, target_maps, ENCODING_COLS)
@@ -144,7 +144,6 @@ def clean_values(df):
     df[COLUMNS[GENDER]] = df[COLUMNS[GENDER]].replace(to_replace ="m", value ="male")
     df[COLUMNS[GENDER]] = df[COLUMNS[GENDER]].replace(to_replace='0', value='unknown')
     df[COLUMNS[DEGREE]] = df[COLUMNS[DEGREE]].replace(to_replace='0', value='No')
-    df[COLUMNS[HAIR]] = df[COLUMNS[HAIR]].replace(to_replace='0', value='unknown')
     df[COLUMNS[HOUSING]] = df[COLUMNS[HOUSING]].replace(to_replace='0', value='unknown')
     return df
 
@@ -170,6 +169,8 @@ def clean_str_cols(df, col):
 
     """
     df[COLUMNS[col]].fillna('unknown', inplace=True)
+    if df[COLUMNS[col]].isnull().values.any():
+        print(COLUMNS[col] + " still has nans!")
     return df
 
 def clean_num_cols(df, col):
@@ -181,6 +182,8 @@ def clean_num_cols(df, col):
     """
     df[COLUMNS[col]].fillna(df[COLUMNS[col]].mean(), inplace=True)
     return df
+
+
 
 def create_target_mappings(df, target_column, encoding_columns, mean_smoothing_weight=0.3):
         """
@@ -214,6 +217,24 @@ def target_map_columns(df, target_maps, encoding_cols):
         df[COLUMNS[col]] = df[COLUMNS[col]].map(target_maps[COLUMNS[col]]).fillna(target_maps[COLUMNS[INCOME]])
     return df
 
+def encode_labels(df, encoding_cols):
+    """
+    Label encodes the categorical cols passed in
+    :param df:
+    :param encoding_cols:
+    :return df:
+    """
+
+    for col in encoding_cols:
+        label_encoder = LabelEncoder()
+        print("Encoding " + COLUMNS[col])
+        print(df[COLUMNS[col]].head())
+        if df[COLUMNS[col]].isnull().values.any():
+            print("Found nulls!")
+        df[COLUMNS[col]] = label_encoder.fit_transform(df[COLUMNS[col]])
+    return df
+
+
 def remove_unknowns(df, col, training):
     """
     Removes all the unknowns from training data
@@ -232,24 +253,26 @@ def remove_unknowns(df, col, training):
             clean_num_cols(df, col)
     return df
 
-def log_transform(df, col):
+def log_transform(df, cols):
     """
     Log transforms a column
     :param df:
     :param col:
     :return: dataframe
     """
-    df[COLUMNS[col]] = df[COLUMNS[col]].apply(np.log)
+    for col in cols:
+        df[COLUMNS[col]] = df[COLUMNS[col]].apply(np.log)
     return df
 
-def untransform_col(df, col):
+def untransform_col(df, cols):
     """
     Reverse the log transform
     :param df:
     :param col:
     :return: dataframe
     """
-    df[COLUMNS[col]] = df[COLUMNS[col]].apply(np.exp)
+    for col in cols:
+        df[COLUMNS[col]] = df[COLUMNS[col]].apply(np.exp)
     return df
 
 def remove_outliers(df, training, col):

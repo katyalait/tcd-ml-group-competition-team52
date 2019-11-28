@@ -13,7 +13,7 @@ def main():
     tf = pd.read_csv(pp.TEST_DATA, na_values=pp.MISSING_VALUES, low_memory=False)
 
     df, tf = pp.clean_data(df, tf)
-    model = train.split_and_train(df, pp.TARGET_COLUMNS[0], 0.2, train.GRADIENT_BOOST, tf)
+    model = train.split_and_train(df, pp.TARGET_COLUMNS[0], 0.2, train.RANDOM_FOREST, tf)
 
 if __name__ == '__main__':
     main()
